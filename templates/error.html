@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Database error{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-body">
+        <h1 class="h4 text-danger">Could not reach the database</h1>
+        <p>The app could not complete a database request. Check that:</p>
+        <ul>
+            <li>the MySQL server is running,</li>
+            <li><code>schema.sql</code> has been run to create the <code>job_tracker</code> database, and</li>
+            <li>the settings in your <code>.env</code> file (host, user, password, database name) are correct.</li>
+        </ul>
+        <p class="mb-0 text-muted small">Details: {{ error }}</p>
+    </div>
+</div>
+{% endblock %}
