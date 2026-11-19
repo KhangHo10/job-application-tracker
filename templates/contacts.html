@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% from "_macros.html" import delete_button %}
+{% block title %}Contacts{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Contacts</h1>
+    <a class="btn btn-primary" href="{{ url_for('contacts_new', company_id=selected_company_id) }}">+ Add contact</a>
+</div>
+
+<form class="row g-2 mb-3 align-items-end" method="get" action="{{ url_for('contacts') }}">
+    <div class="col-sm-6 col-md-4">
+        <label for="filter_company" class="form-label small text-muted mb-1">Company</label>
+        <select class="form-select" id="filter_company" name="company_id">
+            <option value="">All companies</option>
+            {% for c in companies %}
+            <option value="{{ c.company_id }}" {% if c.company_id == selected_company_id %}selected{% endif %}>
+                {{ c.company_name }}{% if c.city %} ({{ c.city }}){% endif %}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-auto">
+        <button type="submit" class="btn btn-outline-primary">Filter</button>
+        {% if selected_company_id %}<a class="btn btn-link" href="{{ url_for('contacts') }}">Clear</a>{% endif %}
+    </div>
+</form>
+
+<div class="card">
+    {% if contacts %}
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Title</th>
+                    <th>Company</th>
+                    <th>Email</th>
+                    <th>Phone</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ct in contacts %}
+                <tr>
+                    <td><a href="{{ url_for('contacts_detail', contact_id=ct.contact_id) }}">{{ ct.contact_name }}</a></td>
+                    <td>{{ ct.title or "—" }}</td>
+                    <td><a class="link-secondary" href="{{ url_for('companies_detail', company_id=ct.company_id) }}">{{ ct.company_name }}</a></td>
+                    <td>{% if ct.email %}<a href="mailto:{{ ct.email }}">{{ ct.email }}</a>{% else %}—{% endif %}</td>
+                    <td class="text-nowrap">{{ ct.phone or "—" }}</td>
+                    <td class="text-end text-nowrap">
+                        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('contacts_edit', contact_id=ct.contact_id) }}">Edit</a>
+                        {{ delete_button(url_for('contacts_delete', contact_id=ct.contact_id), ct.contact_name) }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% elif selected_company_id %}
+    <div class="empty-state">No contacts at this company.</div>
+    {% else %}
+    <div class="empty-state">No contacts yet. <a href="{{ url_for('contacts_new') }}">Add the first one.</a></div>
+    {% endif %}
+</div>
+{% endblock %}

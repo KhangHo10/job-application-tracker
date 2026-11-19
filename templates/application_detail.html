@@ -77,7 +77,7 @@
     <ul class="list-group list-group-flush">
         {% for c in contacts %}
         <li class="list-group-item">
-            <strong>{{ c.contact_name }}</strong>{% if c.title %} · {{ c.title }}{% endif %}
+            <strong><a href="{{ url_for('contacts_detail', contact_id=c.contact_id) }}">{{ c.contact_name }}</a></strong>{% if c.title %} · {{ c.title }}{% endif %}
             {% if c.email %}<br><a href="mailto:{{ c.email }}">{{ c.email }}</a>{% endif %}
             {% if c.phone %}<span class="text-muted ms-2">{{ c.phone }}</span>{% endif %}
         </li>

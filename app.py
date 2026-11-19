@@ -122,7 +122,7 @@ def companies_detail(company_id):
         "company_detail.html",
         company=company,
         jobs=db.get_jobs(company_id=company_id),
-        contacts=db.get_company_contacts(company_id),
+        contacts=db.get_contacts(company_id=company_id),
         cascade=db.get_company_cascade_counts(company_id),
     )
 
@@ -309,7 +309,7 @@ def applications_new():
 def applications_detail(application_id):
     application = db.get_application(application_id) or abort(404)
     return render_template("application_detail.html", application=application,
-                           contacts=db.get_company_contacts(application["company_id"]))
+                           contacts=db.get_contacts(company_id=application["company_id"]))
 
 
 @app.route("/applications/<int:application_id>/edit", methods=["GET", "POST"])
@@ -338,13 +338,77 @@ def applications_delete(application_id):
 
 
 # ---------------------------------------------------------------------
-# Placeholders until each section is built
+# Contacts
 # ---------------------------------------------------------------------
+
+def validate_contact_form(form):
+    """validate_contact plus the company dropdown."""
+    data, errors = validate_contact(form)
+    data["company_id"] = parse_int(form.get("company_id") or "")
+    if data["company_id"] is None:
+        errors.insert(0, "Please choose a company.")
+    elif db.get_company(data["company_id"]) is None:
+        errors.insert(0, "The selected company no longer exists.")
+    return data, errors
+
+
+def render_contact_form(form, contact=None, status=200):
+    return render_template("contact_form.html", form=form, contact=contact,
+                           companies=db.get_company_options()), status
+
 
 @app.route("/contacts")
 def contacts():
-    return render_template("base.html", title="Contacts")
+    company_id = parse_int(request.args.get("company_id") or "")
+    return render_template("contacts.html", contacts=db.get_contacts(company_id=company_id),
+                           companies=db.get_company_options(), selected_company_id=company_id)
 
+
+@app.route("/contacts/new", methods=["GET", "POST"])
+def contacts_new():
+    if request.method == "POST":
+        data, errors = validate_contact_form(request.form)
+        if not errors:
+            contact_id = db.create_contact(data)
+            flash(f"Added {data['contact_name']}.", "success")
+            return redirect(url_for("contacts_detail", contact_id=contact_id))
+        flash_errors(errors)
+        return render_contact_form(request.form, status=400)
+    # ?company_id=N pre-selects the company (from the company detail page).
+    return render_contact_form({"company_id": parse_int(request.args.get("company_id") or "")})
+
+
+@app.route("/contacts/<int:contact_id>")
+def contacts_detail(contact_id):
+    contact = db.get_contact(contact_id) or abort(404)
+    return render_template("contact_detail.html", contact=contact)
+
+
+@app.route("/contacts/<int:contact_id>/edit", methods=["GET", "POST"])
+def contacts_edit(contact_id):
+    contact = db.get_contact(contact_id) or abort(404)
+    if request.method == "POST":
+        data, errors = validate_contact_form(request.form)
+        if not errors:
+            db.update_contact(contact_id, data)
+            flash(f"Updated {data['contact_name']}.", "success")
+            return redirect(url_for("contacts_detail", contact_id=contact_id))
+        flash_errors(errors)
+        return render_contact_form(request.form, contact=contact, status=400)
+    return render_contact_form(contact, contact=contact)
+
+
+@app.route("/contacts/<int:contact_id>/delete", methods=["POST"])
+def contacts_delete(contact_id):
+    contact = db.get_contact(contact_id) or abort(404)
+    db.delete_contact(contact_id)
+    flash(f"Deleted {contact['contact_name']} ({contact['company_name']}).", "success")
+    return redirect(url_for("contacts"))
+
+
+# ---------------------------------------------------------------------
+# Placeholders until each section is built
+# ---------------------------------------------------------------------
 
 @app.route("/job-match")
 def job_match():

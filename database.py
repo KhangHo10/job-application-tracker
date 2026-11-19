@@ -167,13 +167,6 @@ def delete_company(company_id):
     return _execute("DELETE FROM companies WHERE company_id = %s", (company_id,))
 
 
-def get_company_contacts(company_id):
-    return _fetch_all(
-        "SELECT * FROM contacts WHERE company_id = %s ORDER BY contact_name",
-        (company_id,),
-    )
-
-
 # ---------------------------------------------------------------------
 # Jobs
 # ---------------------------------------------------------------------
@@ -352,3 +345,45 @@ def delete_application(application_id):
 # ---------------------------------------------------------------------
 
 CONTACT_FIELDS = ("contact_name", "title", "email", "phone", "linkedin_url", "notes")
+
+_CONTACT_SELECT = """
+    SELECT ct.*, c.company_name
+    FROM contacts ct
+    JOIN companies c ON c.company_id = ct.company_id
+"""
+
+
+def get_contacts(company_id=None):
+    """All contacts with company name, optionally for one company."""
+    sql, params = _CONTACT_SELECT, ()
+    if company_id is not None:
+        sql += " WHERE ct.company_id = %s"
+        params = (company_id,)
+    sql += " ORDER BY ct.contact_name, ct.contact_id"
+    return _fetch_all(sql, params)
+
+
+def get_contact(contact_id):
+    return _fetch_one(_CONTACT_SELECT + " WHERE ct.contact_id = %s", (contact_id,))
+
+
+def create_contact(data):
+    return _insert(
+        """INSERT INTO contacts (company_id, contact_name, title, email, phone, linkedin_url, notes)
+           VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+        tuple(data[f] for f in ("company_id",) + CONTACT_FIELDS),
+    )
+
+
+def update_contact(contact_id, data):
+    return _execute(
+        """UPDATE contacts
+           SET company_id = %s, contact_name = %s, title = %s, email = %s,
+               phone = %s, linkedin_url = %s, notes = %s
+           WHERE contact_id = %s""",
+        tuple(data[f] for f in ("company_id",) + CONTACT_FIELDS) + (contact_id,),
+    )
+
+
+def delete_contact(contact_id):
+    return _execute("DELETE FROM contacts WHERE contact_id = %s", (contact_id,))
