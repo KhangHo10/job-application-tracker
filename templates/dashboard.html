@@ -1,10 +1,136 @@
 {% extends "base.html" %}
+{% from "_macros.html" import status_badge %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
 <div class="page-header">
     <h1>Dashboard</h1>
+    <a class="btn btn-primary" href="{{ url_for('applications_new') }}">+ Add application</a>
 </div>
-<div class="card">
-    <div class="card-body empty-state">The dashboard is coming soon.</div>
+
+<div class="row g-3 mb-4">
+    {% for key, label, endpoint in [
+        ("companies", "Companies", "companies"),
+        ("jobs", "Jobs", "jobs"),
+        ("applications", "Applications", "applications"),
+        ("contacts", "Contacts", "contacts"),
+    ] %}
+    <div class="col-6 col-lg">
+        <a class="card stat-card h-100 text-decoration-none" href="{{ url_for(endpoint) }}">
+            <div class="card-body">
+                <div class="stat-value text-body">{{ counts[key] }}</div>
+                <div class="stat-label">{{ label }}</div>
+            </div>
+        </a>
+    </div>
+    {% endfor %}
+    <div class="col-12 col-lg">
+        <div class="card stat-card h-100 border-start border-4 border-success">
+            <div class="card-body">
+                <div class="stat-value text-success">{{ responded | percent(total) }}</div>
+                <div class="stat-label">Response rate</div>
+                <div class="small text-muted">{{ responded }} of {{ total }} got a response (Screening or later, incl. Rejected)</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-4">
+        <h2 class="h5">Applications by status</h2>
+        <div class="card">
+            <table class="table align-middle">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th class="text-end">Count</th>
+                        <th class="text-end">Share</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for status, n in statuses %}
+                    <tr>
+                        <td><a class="text-decoration-none" href="{{ url_for('applications', status=status) }}">{{ status_badge(status) }}</a></td>
+                        <td class="text-end">{{ n }}</td>
+                        <td class="text-end text-muted">{{ n | percent(total) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <h2 class="h5">Upcoming interviews</h2>
+        <div class="card mb-4">
+            {% if upcoming %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>When</th>
+                            <th>Job</th>
+                            <th>Round</th>
+                            <th>Interviewer</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for i in upcoming %}
+                        <tr>
+                            <td class="text-nowrap">
+                                {{ i.round_date }}<br>
+                                <span class="small {{ 'text-danger fw-semibold' if i.days_until <= 1 else 'text-muted' }}">
+                                    {% if i.days_until == 0 %}Today{% elif i.days_until == 1 %}Tomorrow{% else %}In {{ i.days_until }} days{% endif %}
+                                </span>
+                            </td>
+                            <td>
+                                <a href="{{ url_for('applications_detail', application_id=i.application_id) }}">{{ i.job_title }}</a>
+                                <div class="small text-muted">{{ i.company_name }}</div>
+                            </td>
+                            <td>{{ i.round_type or "—" }}</td>
+                            <td>{{ i.interviewer or "—" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">No upcoming interviews. Add rounds on an application to see them here.</div>
+            {% endif %}
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h2 class="h5 mb-0">Recent applications</h2>
+            <a class="small" href="{{ url_for('applications') }}">View all</a>
+        </div>
+        <div class="card">
+            {% if recent %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>Applied on</th>
+                            <th>Job</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for a in recent %}
+                        <tr>
+                            <td class="text-nowrap"><a href="{{ url_for('applications_detail', application_id=a.application_id) }}">{{ a.application_date }}</a></td>
+                            <td>
+                                {{ a.job_title }}
+                                <div class="small text-muted">{{ a.company_name }}</div>
+                            </td>
+                            <td>{{ status_badge(a.status) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">No applications yet. <a href="{{ url_for('applications_new') }}">Add your first one.</a></div>
+            {% endif %}
+        </div>
+    </div>
 </div>
 {% endblock %}

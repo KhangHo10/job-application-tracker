@@ -276,13 +276,16 @@ def _application_params(data):
     return tuple(data[f] for f in APPLICATION_FIELDS) + (interview_data,)
 
 
-def get_applications(status=None):
-    """All applications with job and company names, newest first, optionally by status."""
+def get_applications(status=None, limit=None):
+    """Applications with job and company names, newest first, optionally by status."""
     sql, params = _APPLICATION_SELECT, ()
     if status is not None:
         sql += " WHERE a.status = %s"
         params = (status,)
     sql += " ORDER BY a.application_date DESC, a.application_id DESC"
+    if limit is not None:
+        sql += " LIMIT %s"
+        params += (limit,)
     return _load_json(_fetch_all(sql, params), "interview_data", _empty_rounds)
 
 
@@ -387,3 +390,50 @@ def update_contact(contact_id, data):
 
 def delete_contact(contact_id):
     return _execute("DELETE FROM contacts WHERE contact_id = %s", (contact_id,))
+
+
+# ---------------------------------------------------------------------
+# Dashboard
+# ---------------------------------------------------------------------
+
+def get_table_counts():
+    return _fetch_one(
+        """SELECT (SELECT COUNT(*) FROM companies) AS companies,
+                  (SELECT COUNT(*) FROM jobs) AS jobs,
+                  (SELECT COUNT(*) FROM applications) AS applications,
+                  (SELECT COUNT(*) FROM contacts) AS contacts"""
+    )
+
+
+def get_status_counts():
+    """{status: count} for statuses that have at least one application."""
+    rows = _fetch_all("SELECT status, COUNT(*) AS n FROM applications GROUP BY status")
+    return {row["status"]: row["n"] for row in rows}
+
+
+def get_upcoming_interviews(limit=10):
+    """Interview rounds dated today or later, soonest first.
+
+    JSON_TABLE turns each application's interview_data.rounds array into
+    rows, so the rounds can be filtered, joined, and sorted in SQL.
+    """
+    return _fetch_all(
+        """SELECT a.application_id, a.status, j.job_title, c.company_name,
+                  r.round_date, r.round_type, r.interviewer,
+                  DATEDIFF(r.round_date, CURDATE()) AS days_until
+           FROM applications a
+           CROSS JOIN JSON_TABLE(
+               a.interview_data, '$.rounds[*]'
+               COLUMNS (
+                   round_date  DATE         PATH '$.date',
+                   round_type  VARCHAR(50)  PATH '$.type',
+                   interviewer VARCHAR(100) PATH '$.interviewer'
+               )
+           ) AS r
+           JOIN jobs j ON j.job_id = a.job_id
+           JOIN companies c ON c.company_id = j.company_id
+           WHERE r.round_date >= CURDATE()
+           ORDER BY r.round_date, a.application_id
+           LIMIT %s""",
+        (limit,),
+    )

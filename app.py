@@ -12,7 +12,8 @@ from dotenv import load_dotenv
 from flask import Flask, abort, flash, redirect, render_template, request, url_for
 
 import database as db
-from validators import (INTERVIEW_TYPES, JOB_TYPES, STATUSES, parse_int, read_rounds,
+from matching import match_jobs
+from validators import (INTERVIEW_TYPES, JOB_TYPES, STATUSES, parse_int, parse_skills, read_rounds,
                         validate_application, validate_company, validate_contact, validate_job)
 
 load_dotenv()
@@ -86,9 +87,42 @@ def flash_errors(errors):
 # Dashboard
 # ---------------------------------------------------------------------
 
+# Statuses that mean the company responded. "Applied" means no response yet,
+# and "Withdrawn" was the applicant's choice, not a response.
+RESPONDED_STATUSES = ("Screening", "Interview", "Offer", "Rejected")
+
+
+def response_rate(status_counts):
+    """(responded, total) from a {status: count} dict."""
+    total = sum(status_counts.values())
+    responded = sum(status_counts.get(s, 0) for s in RESPONDED_STATUSES)
+    return responded, total
+
+
+@app.template_filter("percent")
+def percent(part, total):
+    """'63%' for 5 of 8, or '—' when total is 0.
+
+    Rounds halves up (62.5 -> 63); Python's round() and Jinja's round filter
+    round halves to even (62.5 -> 62), which surprises readers.
+    """
+    return f"{int(100 * part / total + 0.5)}%" if total else "—"
+
+
 @app.route("/")
 def dashboard():
-    return render_template("dashboard.html")
+    status_counts = db.get_status_counts()
+    responded, total = response_rate(status_counts)
+    return render_template(
+        "dashboard.html",
+        counts=db.get_table_counts(),
+        # Every status in ENUM order, including those with zero applications.
+        statuses=[(s, status_counts.get(s, 0)) for s in STATUSES],
+        responded=responded,
+        total=total,
+        recent=db.get_applications(limit=5),
+        upcoming=db.get_upcoming_interviews(),
+    )
 
 
 # ---------------------------------------------------------------------
@@ -407,12 +441,24 @@ def contacts_delete(contact_id):
 
 
 # ---------------------------------------------------------------------
-# Placeholders until each section is built
+# Job Match
 # ---------------------------------------------------------------------
 
 @app.route("/job-match")
 def job_match():
-    return render_template("base.html", title="Job Match")
+    # GET so results have a shareable URL, e.g. /job-match?skills=Python,+SQL
+    submitted = "skills" in request.args
+    skills_text = (request.args.get("skills") or "").strip()
+    skills = parse_skills(skills_text)
+    error, results, job_count = None, [], 0
+    if submitted and not skills:
+        error = "Enter at least one skill, separated by commas (e.g. Python, SQL, Flask)."
+    elif skills:
+        jobs = db.get_jobs()
+        job_count = len(jobs)
+        results = match_jobs(skills, jobs)
+    return render_template("job_match.html", skills_text=skills_text, skills=skills, error=error,
+                           results=results, job_count=job_count), (400 if error else 200)
 
 
 if __name__ == "__main__":

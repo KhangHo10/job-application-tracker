@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% from "_macros.html" import skill_badges %}
+{% block title %}Job Match{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Job Match</h1>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" action="{{ url_for('job_match') }}">
+            <label for="skills" class="form-label">Your skills</label>
+            <div class="row g-2">
+                <div class="col-md">
+                    <input type="text" class="form-control{% if error %} is-invalid{% endif %}" id="skills" name="skills"
+                           value="{{ skills_text }}" placeholder="Python, SQL, Flask" required
+                           aria-describedby="skills-help{% if error %} skills-error{% endif %}">
+                    {% if error %}<div id="skills-error" class="invalid-feedback">{{ error }}</div>{% endif %}
+                </div>
+                <div class="col-md-auto">
+                    <button type="submit" class="btn btn-primary w-100">Find matches</button>
+                </div>
+            </div>
+            <div id="skills-help" class="form-text">
+                Separate skills with commas. Matching ignores capitalization; each job's score is
+                the share of its required skills you have.
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if skills %}
+<p class="text-muted">
+    {{ results | length | plural("job") }} of {{ job_count }} match{{ "es" if results | length == 1 else "" }}
+    {{ skill_badges(skills) }}
+    <br><span class="small">Jobs with no skills in common (0%) or no listed skills are hidden.</span>
+</p>
+
+{% for r in results %}
+{% set job = r.job %}
+{% set pct = r.matched | length | percent(r.total) %}
+<div class="card mb-3 match-card">
+    <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+            <div>
+                <h2 class="h5 mb-1"><a href="{{ url_for('jobs_detail', job_id=job.job_id) }}">{{ job.job_title }}</a></h2>
+                <div class="text-muted small">
+                    <a class="link-secondary" href="{{ url_for('companies_detail', company_id=job.company_id) }}">{{ job.company_name }}</a>
+                    · {{ job.job_type }} · {{ job | salary_range }}
+                </div>
+            </div>
+            <a class="btn btn-sm btn-primary" href="{{ url_for('applications_new', job_id=job.job_id) }}">Apply</a>
+        </div>
+
+        <div class="d-flex align-items-center gap-3 mt-3">
+            <div class="progress flex-grow-1" role="progressbar" aria-label="Match for {{ job.job_title }}"
+                 aria-valuenow="{{ r.percent | round | int }}" aria-valuemin="0" aria-valuemax="100" style="height: 0.75rem">
+                <div class="progress-bar {{ 'bg-success' if r.percent >= 75 else ('bg-primary' if r.percent >= 50 else 'bg-warning') }}"
+                     style="width: {{ r.percent }}%"></div>
+            </div>
+            <div class="match-percent fw-semibold">{{ pct }}</div>
+            <div class="small text-muted text-nowrap">{{ r.matched | length }}/{{ r.total }} skills</div>
+        </div>
+
+        <div class="row mt-3 small">
+            <div class="col-sm-6">
+                <div class="text-muted mb-1">You have</div>
+                {% for s in r.matched %}<span class="badge rounded-pill text-bg-success me-1">✓ {{ s }}</span>{% endfor %}
+            </div>
+            <div class="col-sm-6 mt-2 mt-sm-0">
+                <div class="text-muted mb-1">Missing</div>
+                {% for s in r.missing %}<span class="badge rounded-pill text-bg-light border me-1">{{ s }}</span>{% else %}<span class="text-success">Nothing — full match!</span>{% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="card">
+    <div class="empty-state">No jobs list any of these skills. Try adding more skills or different spellings (e.g. “SQL” vs “MySQL”).</div>
+</div>
+{% endfor %}
+{% endif %}
+{% endblock %}
