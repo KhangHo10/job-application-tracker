@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% from "_macros.html" import delete_button %}
+{% block title %}{{ company.company_name }}{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('companies') }}">Companies</a></li>
+        <li class="breadcrumb-item active" aria-current="page">{{ company.company_name }}</li>
+    </ol>
+</nav>
+
+<div class="page-header">
+    <h1>{{ company.company_name }}</h1>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary" href="{{ url_for('companies_edit', company_id=company.company_id) }}">Edit</a>
+        {{ delete_button(url_for('companies_delete', company_id=company.company_id), company.company_name,
+                         cascade_message(cascade), size="md") }}
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <dl class="row mb-0">
+            <dt class="col-sm-3">Industry</dt>
+            <dd class="col-sm-9">{{ company.industry or "—" }}</dd>
+            <dt class="col-sm-3">Location</dt>
+            <dd class="col-sm-9">{{ [company.city, company.state] | select | join(", ") or "—" }}</dd>
+            <dt class="col-sm-3">Website</dt>
+            <dd class="col-sm-9">
+                {% if company.website %}
+                <a href="{{ company.website }}" target="_blank" rel="noopener noreferrer">{{ company.website }}</a>
+                {% else %}—{% endif %}
+            </dd>
+            <dt class="col-sm-3">Notes</dt>
+            <dd class="col-sm-9 mb-0" style="white-space: pre-line">{{ company.notes or "—" }}</dd>
+        </dl>
+    </div>
+</div>
+
+<h2 class="h5">Jobs <span class="text-muted fw-normal">({{ jobs | length }})</span></h2>
+<div class="card mb-4">
+    {% if jobs %}
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Type</th>
+                    <th>Salary</th>
+                    <th>Posted</th>
+                    <th class="text-end">Applications</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for job in jobs %}
+                <tr>
+                    <td>{{ job.job_title }}</td>
+                    <td>{{ job.job_type }}</td>
+                    <td class="text-nowrap">{{ job | salary_range }}</td>
+                    <td class="text-nowrap">{{ job.date_posted or "—" }}</td>
+                    <td class="text-end">{{ job.application_count }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">No jobs at this company yet.</div>
+    {% endif %}
+</div>
+
+<h2 class="h5">Contacts <span class="text-muted fw-normal">({{ contacts | length }})</span></h2>
+<div class="card">
+    {% if contacts %}
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Title</th>
+                    <th>Email</th>
+                    <th>Phone</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for contact in contacts %}
+                <tr>
+                    <td>{{ contact.contact_name }}</td>
+                    <td>{{ contact.title or "—" }}</td>
+                    <td>{% if contact.email %}<a href="mailto:{{ contact.email }}">{{ contact.email }}</a>{% else %}—{% endif %}</td>
+                    <td class="text-nowrap">{{ contact.phone or "—" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">No contacts at this company yet.</div>
+    {% endif %}
+</div>
+{% endblock %}

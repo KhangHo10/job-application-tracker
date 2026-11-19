@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% from "_macros.html" import delete_button %}
+{% block title %}Companies{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Companies</h1>
+    <a class="btn btn-primary" href="{{ url_for('companies_new') }}">+ Add company</a>
+</div>
+
+<form class="row g-2 mb-3" method="get" action="{{ url_for('companies') }}" role="search">
+    <div class="col-sm-8 col-md-6">
+        <input type="search" class="form-control" name="q" value="{{ search }}"
+               placeholder="Search by name, industry, city, or state" aria-label="Search companies">
+    </div>
+    <div class="col-auto">
+        <button type="submit" class="btn btn-outline-primary">Search</button>
+        {% if search %}<a class="btn btn-link" href="{{ url_for('companies') }}">Clear</a>{% endif %}
+    </div>
+</form>
+
+<div class="card">
+    {% if companies %}
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Company</th>
+                    <th>Industry</th>
+                    <th>Location</th>
+                    <th>Website</th>
+                    <th class="text-end">Jobs</th>
+                    <th class="text-end">Contacts</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in companies %}
+                <tr>
+                    <td><a href="{{ url_for('companies_detail', company_id=c.company_id) }}">{{ c.company_name }}</a></td>
+                    <td>{{ c.industry or "—" }}</td>
+                    <td>{{ [c.city, c.state] | select | join(", ") or "—" }}</td>
+                    <td>
+                        {% if c.website %}
+                        <a href="{{ c.website }}" target="_blank" rel="noopener noreferrer">{{ c.website | replace("https://", "") | replace("http://", "") }}</a>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td class="text-end">{{ c.job_count }}</td>
+                    <td class="text-end">{{ c.contact_count }}</td>
+                    <td class="text-end text-nowrap">
+                        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('companies_edit', company_id=c.company_id) }}">Edit</a>
+                        {{ delete_button(url_for('companies_delete', company_id=c.company_id), c.company_name, cascade_message(c)) }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% elif search %}
+    <div class="empty-state">No companies match “{{ search }}”.</div>
+    {% else %}
+    <div class="empty-state">No companies yet. <a href="{{ url_for('companies_new') }}">Add the first one.</a></div>
+    {% endif %}
+</div>
+{% endblock %}

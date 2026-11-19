@@ -1,0 +1,10 @@
+{# Reusable template pieces. Import with: {% from "_macros.html" import delete_button %} #}
+
+{# A POST form whose submit button asks for confirmation first (see static/app.js).
+   `cascade` is the text from cascade_message(), e.g. "2 jobs, 1 contact". #}
+{% macro delete_button(action, name, cascade="", size="sm") -%}
+<form method="post" action="{{ action }}" class="d-inline"
+      data-confirm="Delete {{ name }}?{% if cascade %} This will also delete {{ cascade }}.{% endif %} This cannot be undone.">
+    <button type="submit" class="btn btn-outline-danger btn-{{ size }}">Delete</button>
+</form>
+{%- endmacro %}
