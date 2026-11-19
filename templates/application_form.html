@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% set heading = "Edit application" if application else "Add application" %}
+{% block title %}{{ heading }}{% endblock %}
+
+{# One row of the interview-rounds table. Called with an empty dict for the "+ Add round" template. #}
+{% macro round_row(r) -%}
+<tr>
+    <td><input type="date" class="form-control form-control-sm" name="round_date" value="{{ r.date or '' }}"
+               required aria-label="Round date"></td>
+    <td>
+        <select class="form-select form-select-sm" name="round_type" aria-label="Round type">
+            {% for t in INTERVIEW_TYPES %}
+            <option value="{{ t }}" {% if t == r.type %}selected{% endif %}>{{ t }}</option>
+            {% endfor %}
+        </select>
+    </td>
+    <td><input type="text" class="form-control form-control-sm" name="round_interviewer"
+               value="{{ r.interviewer or '' }}" maxlength="100" aria-label="Interviewer"></td>
+    <td><input type="text" class="form-control form-control-sm" name="round_notes"
+               value="{{ r.notes or '' }}" maxlength="500" aria-label="Notes"></td>
+    <td class="text-end">
+        <button type="button" class="btn btn-sm btn-outline-danger" data-remove-round aria-label="Remove round">&times;</button>
+    </td>
+</tr>
+{%- endmacro %}
+
+{% block content %}
+<div class="page-header">
+    <h1>{{ heading }}</h1>
+</div>
+
+<form method="post">
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-8">
+                    <label for="job_id" class="form-label">Job <span class="text-danger">*</span></label>
+                    <select class="form-select" id="job_id" name="job_id" required>
+                        <option value="">Choose a job…</option>
+                        {% for j in jobs %}
+                        <option value="{{ j.job_id }}"
+                                {% if form.job_id is not none and form.job_id | string == j.job_id | string %}selected{% endif %}>
+                            {{ j.job_title }} — {{ j.company_name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    {% if not jobs %}
+                    <div class="form-text">No jobs yet — <a href="{{ url_for('jobs_new') }}">add one first</a>.</div>
+                    {% endif %}
+                </div>
+                <div class="col-md-4">
+                    <label for="application_date" class="form-label">Application date <span class="text-danger">*</span></label>
+                    <input type="date" class="form-control" id="application_date" name="application_date"
+                           value="{{ form.application_date or '' }}" max="{{ today }}" required>
+                </div>
+                <div class="col-md-4">
+                    <label for="status" class="form-label">Status <span class="text-danger">*</span></label>
+                    <select class="form-select" id="status" name="status" required>
+                        {% for s in STATUSES %}
+                        <option value="{{ s }}" {% if s == form.status %}selected{% endif %}>{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="resume_version" class="form-label">Resume version</label>
+                    <input type="text" class="form-control" id="resume_version" name="resume_version"
+                           value="{{ form.resume_version or '' }}" maxlength="50" placeholder="e.g. v3-software">
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="cover_letter_sent" name="cover_letter_sent"
+                               value="1" {% if form.cover_letter_sent %}checked{% endif %}>
+                        <label class="form-check-label" for="cover_letter_sent">Cover letter sent</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h2 class="h6 mb-0">Interview rounds</h2>
+                <button type="button" class="btn btn-sm btn-outline-primary" data-add-round>+ Add round</button>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle rounds-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Interviewer</th>
+                            <th>Notes</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="rounds-body">
+                        {% for r in rounds %}{{ round_row(r) }}{% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p id="rounds-empty" class="text-muted small mb-0" {% if rounds %}hidden{% endif %}>
+                No interview rounds yet. Click “+ Add round” to record one.
+            </p>
+            <template id="round-template">{{ round_row({}) }}</template>
+        </div>
+    </div>
+
+    {% if not application %}
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="add_contact" name="add_contact" value="1"
+                       data-toggle-fieldset="#nc-fields" {% if form.add_contact %}checked{% endif %}>
+                <label class="form-check-label" for="add_contact">Also add a contact at this company</label>
+            </div>
+            <div class="form-text">The application and the contact are saved together in one transaction: if either fails, neither is saved.</div>
+            {# Disabled while unchecked so its fields are neither validated by the browser nor submitted. #}
+            <fieldset id="nc-fields" class="row g-3 mt-1" {% if not form.add_contact %}disabled hidden{% endif %}>
+                <div class="col-md-6">
+                    <label for="nc_contact_name" class="form-label">Name <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="nc_contact_name" name="nc_contact_name"
+                           value="{{ form.nc_contact_name or '' }}" maxlength="100" required>
+                </div>
+                <div class="col-md-6">
+                    <label for="nc_title" class="form-label">Title</label>
+                    <input type="text" class="form-control" id="nc_title" name="nc_title"
+                           value="{{ form.nc_title or '' }}" maxlength="100" placeholder="e.g. Technical Recruiter">
+                </div>
+                <div class="col-md-6">
+                    <label for="nc_email" class="form-label">Email</label>
+                    <input type="email" class="form-control" id="nc_email" name="nc_email"
+                           value="{{ form.nc_email or '' }}" maxlength="100">
+                </div>
+                <div class="col-md-6">
+                    <label for="nc_phone" class="form-label">Phone</label>
+                    <input type="tel" class="form-control" id="nc_phone" name="nc_phone"
+                           value="{{ form.nc_phone or '' }}" maxlength="30">
+                </div>
+                <div class="col-12">
+                    <label for="nc_linkedin_url" class="form-label">LinkedIn URL</label>
+                    <input type="text" class="form-control" id="nc_linkedin_url" name="nc_linkedin_url"
+                           value="{{ form.nc_linkedin_url or '' }}" maxlength="200">
+                </div>
+                <div class="col-12">
+                    <label for="nc_notes" class="form-label">Notes</label>
+                    <textarea class="form-control" id="nc_notes" name="nc_notes" rows="2">{{ form.nc_notes or '' }}</textarea>
+                </div>
+            </fieldset>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">{{ "Save changes" if application else "Add application" }}</button>
+        <a class="btn btn-outline-secondary"
+           href="{{ url_for('applications_detail', application_id=application.application_id) if application else url_for('applications') }}">Cancel</a>
+    </div>
+</form>
+{% endblock %}

@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% from "_macros.html" import delete_button, status_badge %}
+{% block title %}Applications{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Applications</h1>
+    <a class="btn btn-primary" href="{{ url_for('applications_new') }}">+ Add application</a>
+</div>
+
+<ul class="nav nav-pills flex-wrap gap-1 mb-3" aria-label="Filter by status">
+    <li class="nav-item">
+        <a class="nav-link py-1{% if not selected_status %} active{% endif %}" href="{{ url_for('applications') }}">All</a>
+    </li>
+    {% for s in STATUSES %}
+    <li class="nav-item">
+        <a class="nav-link py-1{% if s == selected_status %} active{% endif %}"
+           href="{{ url_for('applications', status=s) }}">{{ s }}</a>
+    </li>
+    {% endfor %}
+</ul>
+
+<div class="card">
+    {% if applications %}
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Applied on</th>
+                    <th>Job</th>
+                    <th>Company</th>
+                    <th>Status</th>
+                    <th>Resume</th>
+                    <th>Cover letter</th>
+                    <th>Next interview</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in applications %}
+                {% set upcoming = next_round(a) %}
+                <tr>
+                    <td class="text-nowrap"><a href="{{ url_for('applications_detail', application_id=a.application_id) }}">{{ a.application_date }}</a></td>
+                    <td><a href="{{ url_for('jobs_detail', job_id=a.job_id) }}">{{ a.job_title }}</a></td>
+                    <td><a class="link-secondary" href="{{ url_for('companies_detail', company_id=a.company_id) }}">{{ a.company_name }}</a></td>
+                    <td>{{ status_badge(a.status) }}</td>
+                    <td>{{ a.resume_version or "—" }}</td>
+                    <td>{{ "Yes" if a.cover_letter_sent else "No" }}</td>
+                    <td class="text-nowrap">{% if upcoming %}{{ upcoming.date }} · {{ upcoming.type }}{% else %}—{% endif %}</td>
+                    <td class="text-end text-nowrap">
+                        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('applications_edit', application_id=a.application_id) }}">Edit</a>
+                        {{ delete_button(url_for('applications_delete', application_id=a.application_id),
+                                         "your application to " ~ a.job_title ~ " at " ~ a.company_name) }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% elif selected_status %}
+    <div class="empty-state">No applications with status “{{ selected_status }}”.</div>
+    {% else %}
+    <div class="empty-state">No applications yet. <a href="{{ url_for('applications_new') }}">Add the first one.</a></div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -258,3 +258,97 @@ def get_job_applications(job_id):
            ORDER BY application_date DESC, application_id DESC""",
         (job_id,),
     )
+
+
+# ---------------------------------------------------------------------
+# Applications
+# ---------------------------------------------------------------------
+
+APPLICATION_FIELDS = ("job_id", "application_date", "status", "resume_version", "cover_letter_sent")
+
+_APPLICATION_SELECT = """
+    SELECT a.*, j.job_title, j.company_id, c.company_name
+    FROM applications a
+    JOIN jobs j ON j.job_id = a.job_id
+    JOIN companies c ON c.company_id = j.company_id
+"""
+
+
+def _empty_rounds():
+    return {"rounds": []}
+
+
+def _application_params(data):
+    interview_data = json.dumps(data["interview_data"]) if data["interview_data"] else None
+    return tuple(data[f] for f in APPLICATION_FIELDS) + (interview_data,)
+
+
+def get_applications(status=None):
+    """All applications with job and company names, newest first, optionally by status."""
+    sql, params = _APPLICATION_SELECT, ()
+    if status is not None:
+        sql += " WHERE a.status = %s"
+        params = (status,)
+    sql += " ORDER BY a.application_date DESC, a.application_id DESC"
+    return _load_json(_fetch_all(sql, params), "interview_data", _empty_rounds)
+
+
+def get_application(application_id):
+    rows = _fetch_all(_APPLICATION_SELECT + " WHERE a.application_id = %s", (application_id,))
+    return _load_json(rows, "interview_data", _empty_rounds)[0] if rows else None
+
+
+def create_application(data, contact=None):
+    """Insert an application, and optionally a contact, in ONE transaction.
+
+    If `contact` is given (a dict with company_id and the contact fields),
+    both rows are inserted together: if either INSERT fails, ROLLBACK undoes
+    both, so we never save an application without its contact or vice versa.
+    Returns the new application_id.
+    """
+    conn = get_db()
+    try:
+        conn.start_transaction()
+        cursor = conn.cursor()
+        cursor.execute(
+            """INSERT INTO applications (job_id, application_date, status, resume_version,
+                                         cover_letter_sent, interview_data)
+               VALUES (%s, %s, %s, %s, %s, %s)""",
+            _application_params(data),
+        )
+        application_id = cursor.lastrowid
+        if contact is not None:
+            cursor.execute(
+                """INSERT INTO contacts (company_id, contact_name, title, email, phone,
+                                         linkedin_url, notes)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                tuple(contact[f] for f in ("company_id",) + CONTACT_FIELDS),
+            )
+        conn.commit()
+        return application_id
+    except DatabaseError:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def update_application(application_id, data):
+    return _execute(
+        """UPDATE applications
+           SET job_id = %s, application_date = %s, status = %s, resume_version = %s,
+               cover_letter_sent = %s, interview_data = %s
+           WHERE application_id = %s""",
+        _application_params(data) + (application_id,),
+    )
+
+
+def delete_application(application_id):
+    return _execute("DELETE FROM applications WHERE application_id = %s", (application_id,))
+
+
+# ---------------------------------------------------------------------
+# Contacts
+# ---------------------------------------------------------------------
+
+CONTACT_FIELDS = ("contact_name", "title", "email", "phone", "linkedin_url", "notes")

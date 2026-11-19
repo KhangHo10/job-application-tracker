@@ -6,12 +6,14 @@ Endpoint names follow "<section>_<action>" (e.g. companies_edit) so the
 nav bar can highlight the section a page belongs to.
 """
 import os
+from datetime import date
 
 from dotenv import load_dotenv
 from flask import Flask, abort, flash, redirect, render_template, request, url_for
 
 import database as db
-from validators import JOB_TYPES, parse_int, validate_company, validate_job
+from validators import (INTERVIEW_TYPES, JOB_TYPES, STATUSES, parse_int, read_rounds,
+                        validate_application, validate_company, validate_contact, validate_job)
 
 load_dotenv()
 
@@ -61,6 +63,18 @@ def cascade_message(counts):
 
 app.jinja_env.globals["cascade_message"] = cascade_message
 app.jinja_env.globals["JOB_TYPES"] = JOB_TYPES
+app.jinja_env.globals["STATUSES"] = STATUSES
+app.jinja_env.globals["INTERVIEW_TYPES"] = INTERVIEW_TYPES
+
+
+def next_round(application):
+    """The earliest interview round dated today or later, or None."""
+    today = date.today().isoformat()
+    upcoming = [r for r in application["interview_data"]["rounds"] if r["date"] >= today]
+    return min(upcoming, key=lambda r: r["date"]) if upcoming else None
+
+
+app.jinja_env.globals["next_round"] = next_round
 
 
 def flash_errors(errors):
@@ -231,13 +245,101 @@ def jobs_delete(job_id):
 
 
 # ---------------------------------------------------------------------
-# Placeholders until each section is built
+# Applications
 # ---------------------------------------------------------------------
+
+def validate_application_form(form):
+    """validate_application plus a check that the chosen job still exists.
+    Returns (data, errors, job)."""
+    data, errors = validate_application(form)
+    job = db.get_job(data["job_id"]) if data["job_id"] is not None else None
+    if data["job_id"] is not None and job is None:
+        errors.append("The selected job no longer exists.")
+    return data, errors, job
+
+
+def render_application_form(form, rounds, application=None, status=200):
+    return render_template("application_form.html", form=form, rounds=rounds,
+                           application=application, jobs=db.get_job_options(),
+                           today=date.today().isoformat()), status
+
 
 @app.route("/applications")
 def applications():
-    return render_template("base.html", title="Applications")
+    status = request.args.get("status")
+    if status not in STATUSES:
+        status = None
+    return render_template("applications.html", applications=db.get_applications(status),
+                           selected_status=status)
 
+
+@app.route("/applications/new", methods=["GET", "POST"])
+def applications_new():
+    if request.method == "POST":
+        data, errors, job = validate_application_form(request.form)
+        contact = None
+        if request.form.get("add_contact"):
+            contact, contact_errors = validate_contact(request.form, prefix="nc_")
+            errors += [f"New contact: {e}" for e in contact_errors]
+            if job is not None:
+                contact["company_id"] = job["company_id"]
+        if not errors:
+            try:
+                application_id = db.create_application(data, contact)
+            except db.DatabaseError as error:
+                # The transaction was rolled back: neither row was saved.
+                app.logger.exception("Application + contact transaction failed")
+                flash(f"Nothing was saved because the database rejected the request ({error.msg}).", "error")
+            else:
+                saved = f"Saved your application to {job['job_title']} at {job['company_name']}"
+                flash(f"{saved} and added {contact['contact_name']} as a contact." if contact
+                      else f"{saved}.", "success")
+                return redirect(url_for("applications_detail", application_id=application_id))
+        flash_errors(errors)
+        return render_application_form(request.form, read_rounds(request.form), status=400)
+    # ?job_id=N pre-selects the job (from the job detail page and Job Match).
+    return render_application_form(
+        {"job_id": parse_int(request.args.get("job_id") or ""),
+         "application_date": date.today().isoformat(), "status": "Applied"},
+        rounds=[],
+    )
+
+
+@app.route("/applications/<int:application_id>")
+def applications_detail(application_id):
+    application = db.get_application(application_id) or abort(404)
+    return render_template("application_detail.html", application=application,
+                           contacts=db.get_company_contacts(application["company_id"]))
+
+
+@app.route("/applications/<int:application_id>/edit", methods=["GET", "POST"])
+def applications_edit(application_id):
+    application = db.get_application(application_id) or abort(404)
+    if request.method == "POST":
+        data, errors, job = validate_application_form(request.form)
+        if not errors:
+            db.update_application(application_id, data)
+            flash(f"Updated your application to {job['job_title']} at {job['company_name']}.", "success")
+            return redirect(url_for("applications_detail", application_id=application_id))
+        flash_errors(errors)
+        return render_application_form(request.form, read_rounds(request.form),
+                                        application=application, status=400)
+    return render_application_form(application, application["interview_data"]["rounds"],
+                                   application=application)
+
+
+@app.route("/applications/<int:application_id>/delete", methods=["POST"])
+def applications_delete(application_id):
+    application = db.get_application(application_id) or abort(404)
+    db.delete_application(application_id)
+    flash(f"Deleted your application to {application['job_title']} at "
+          f"{application['company_name']}.", "success")
+    return redirect(url_for("applications"))
+
+
+# ---------------------------------------------------------------------
+# Placeholders until each section is built
+# ---------------------------------------------------------------------
 
 @app.route("/contacts")
 def contacts():

@@ -14,8 +14,14 @@ from urllib.parse import urlparse
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
-# Must match the ENUM in schema.sql.
+# Must match the ENUMs in schema.sql.
 JOB_TYPES = ("Full-time", "Part-time", "Contract", "Internship")
+STATUSES = ("Applied", "Screening", "Interview", "Offer", "Rejected", "Withdrawn")
+
+# Choices for the interview-round "type" dropdown (stored inside the JSON).
+INTERVIEW_TYPES = ("Phone Screen", "Technical", "Behavioral", "Onsite", "Final", "Other")
+
+PHONE_CHARS_RE = re.compile(r"^[0-9+()\-.\s]+$")
 
 
 # ---------------------------------------------------------------------
@@ -184,5 +190,104 @@ def validate_job(form):
                                           errors, maximum=50),
         "education": education,
     }
+
+    return data, errors
+
+
+ROUND_FIELDS = ("date", "type", "interviewer", "notes")
+
+
+def read_rounds(form):
+    """Interview rounds as submitted by the "+ Add round" table.
+
+    The table posts parallel lists (round_date, round_type, ...); this zips
+    them back into one dict per row and drops blank rows. "type" is ignored
+    when checking for blank, because its dropdown always has a value.
+    Values are raw strings, so the result can re-fill the form on errors.
+    """
+    columns = [form.getlist(f"round_{field}") for field in ROUND_FIELDS]
+    rounds = []
+    for values in zip(*columns):
+        row = {field: (value or "").strip() for field, value in zip(ROUND_FIELDS, values)}
+        if row["date"] or row["interviewer"] or row["notes"]:
+            rounds.append(row)
+    return rounds
+
+
+def validate_application(form):
+    """Validate the application form. Interview rounds are combined into
+    data["interview_data"], the dict stored in the JSON column."""
+    errors = []
+    data = {
+        "job_id": parse_int(form.get("job_id") or ""),
+        "application_date": _optional_date(form, "application_date", "Application date", errors,
+                                           allow_future=False),
+        "status": clean_text(form, "status"),
+        "resume_version": clean_text(form, "resume_version"),
+        "cover_letter_sent": bool(form.get("cover_letter_sent")),
+    }
+
+    if data["job_id"] is None:
+        errors.append("Please choose a job.")
+    if clean_text(form, "application_date") is None:
+        errors.append("Application date is required.")
+    if data["status"] not in STATUSES:
+        errors.append(f"Status must be one of: {', '.join(STATUSES)}.")
+    check_max_length(data["resume_version"], 50, "Resume version", errors)
+
+    rounds = []
+    for number, row in enumerate(read_rounds(form), start=1):
+        label = f"Interview round {number}"
+        round_date = parse_date(row["date"])
+        if round_date is None:
+            errors.append(f"{label} needs a valid date.")
+        if row["type"] not in INTERVIEW_TYPES:
+            errors.append(f"{label} type must be one of: {', '.join(INTERVIEW_TYPES)}.")
+        check_max_length(row["interviewer"], 100, f"{label} interviewer", errors)
+        check_max_length(row["notes"], 500, f"{label} notes", errors)
+        rounds.append(dict(row, date=round_date.isoformat() if round_date else row["date"]))
+    rounds.sort(key=lambda r: r["date"])
+    data["interview_data"] = {"rounds": rounds} if rounds else None
+
+    return data, errors
+
+
+def validate_contact(form, prefix=""):
+    """Validate contact fields. `prefix` lets another form embed them
+    (the application form uses "nc_" for its "also add a contact" section).
+    company_id is handled by the caller."""
+    errors = []
+
+    def text(field):
+        return clean_text(form, prefix + field)
+
+    data = {
+        "contact_name": text("contact_name"),
+        "title": text("title"),
+        "email": text("email"),
+        "phone": text("phone"),
+        "linkedin_url": normalize_url(text("linkedin_url")),
+        "notes": text("notes"),
+    }
+
+    check_required(data["contact_name"], "Contact name", errors)
+    check_max_length(data["contact_name"], 100, "Contact name", errors)
+    check_max_length(data["title"], 100, "Title", errors)
+
+    if data["email"] is not None:
+        if not is_valid_email(data["email"]):
+            errors.append("Email must be a valid address, e.g. name@example.com.")
+        check_max_length(data["email"], 100, "Email", errors)
+
+    if data["phone"] is not None:
+        digits = sum(ch.isdigit() for ch in data["phone"])
+        if not PHONE_CHARS_RE.match(data["phone"]) or digits < 7:
+            errors.append("Phone must contain at least 7 digits and only digits, spaces, + - ( ) or dots.")
+        check_max_length(data["phone"], 30, "Phone", errors)
+
+    if data["linkedin_url"] is not None:
+        if not is_valid_url(data["linkedin_url"]):
+            errors.append("LinkedIn URL must be a valid URL, e.g. https://www.linkedin.com/in/name.")
+        check_max_length(data["linkedin_url"], 200, "LinkedIn URL", errors)
 
     return data, errors
