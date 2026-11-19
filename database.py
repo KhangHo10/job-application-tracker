@@ -4,6 +4,7 @@ Every SQL statement in the project lives in this module. All queries are
 parameterized (%s placeholders) to prevent SQL injection, and every
 connection is closed in a finally block.
 """
+import json
 import os
 
 import mysql.connector
@@ -60,6 +61,14 @@ def _insert(sql, params=()):
         raise
     finally:
         conn.close()
+
+
+def _load_json(rows, column, default):
+    """Decode a JSON column in place (the driver returns it as a string)."""
+    for row in rows:
+        value = row.get(column)
+        row[column] = json.loads(value) if value else default()
+    return rows
 
 
 def _like(term):
@@ -158,20 +167,94 @@ def delete_company(company_id):
     return _execute("DELETE FROM companies WHERE company_id = %s", (company_id,))
 
 
-def get_company_jobs(company_id):
-    """Jobs at one company, with how many applications each has."""
-    return _fetch_all(
-        """SELECT j.*,
-                  (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.job_id) AS application_count
-           FROM jobs j
-           WHERE j.company_id = %s
-           ORDER BY j.job_title""",
-        (company_id,),
-    )
-
-
 def get_company_contacts(company_id):
     return _fetch_all(
         "SELECT * FROM contacts WHERE company_id = %s ORDER BY contact_name",
         (company_id,),
+    )
+
+
+# ---------------------------------------------------------------------
+# Jobs
+# ---------------------------------------------------------------------
+
+JOB_FIELDS = ("company_id", "job_title", "job_type", "salary_min", "salary_max",
+              "job_url", "date_posted")
+
+_JOB_SELECT = """
+    SELECT j.*, c.company_name,
+           (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.job_id) AS application_count
+    FROM jobs j
+    JOIN companies c ON c.company_id = j.company_id
+"""
+
+
+def get_jobs(company_id=None, job_type=None):
+    """All jobs with company name and application count, optionally filtered."""
+    conditions, params = [], []
+    if company_id is not None:
+        conditions.append("j.company_id = %s")
+        params.append(company_id)
+    if job_type is not None:
+        conditions.append("j.job_type = %s")
+        params.append(job_type)
+    sql = _JOB_SELECT
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
+    sql += " ORDER BY c.company_name, j.job_title, j.job_id"
+    return _load_json(_fetch_all(sql, tuple(params)), "requirements", dict)
+
+
+def get_job(job_id):
+    rows = _fetch_all(_JOB_SELECT + " WHERE j.job_id = %s", (job_id,))
+    return _load_json(rows, "requirements", dict)[0] if rows else None
+
+
+def get_job_options():
+    """Job id, title, and company for every job, for <select> dropdowns."""
+    return _fetch_all(
+        """SELECT j.job_id, j.job_title, c.company_name
+           FROM jobs j JOIN companies c ON c.company_id = j.company_id
+           ORDER BY c.company_name, j.job_title, j.job_id"""
+    )
+
+
+def create_job(data):
+    return _insert(
+        """INSERT INTO jobs (company_id, job_title, job_type, salary_min, salary_max,
+                             job_url, date_posted, requirements)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+        tuple(data[f] for f in JOB_FIELDS) + (json.dumps(data["requirements"]),),
+    )
+
+
+def update_job(job_id, data):
+    return _execute(
+        """UPDATE jobs
+           SET company_id = %s, job_title = %s, job_type = %s, salary_min = %s,
+               salary_max = %s, job_url = %s, date_posted = %s, requirements = %s
+           WHERE job_id = %s""",
+        tuple(data[f] for f in JOB_FIELDS) + (json.dumps(data["requirements"]), job_id),
+    )
+
+
+def get_job_cascade_counts(job_id):
+    """How many rows ON DELETE CASCADE will remove along with this job."""
+    return _fetch_one(
+        "SELECT COUNT(*) AS application_count FROM applications WHERE job_id = %s",
+        (job_id,),
+    )
+
+
+def delete_job(job_id):
+    """Delete a job; its applications cascade."""
+    return _execute("DELETE FROM jobs WHERE job_id = %s", (job_id,))
+
+
+def get_job_applications(job_id):
+    return _fetch_all(
+        """SELECT * FROM applications
+           WHERE job_id = %s
+           ORDER BY application_date DESC, application_id DESC""",
+        (job_id,),
     )

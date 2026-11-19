@@ -1,5 +1,17 @@
 {# Reusable template pieces. Import with: {% from "_macros.html" import delete_button %} #}
 
+{# Colored Bootstrap badge for an application status. #}
+{% macro status_badge(status) -%}
+{%- set colors = {"Applied": "secondary", "Screening": "info", "Interview": "primary",
+                  "Offer": "success", "Rejected": "danger", "Withdrawn": "dark"} -%}
+<span class="badge text-bg-{{ colors.get(status, 'secondary') }}">{{ status }}</span>
+{%- endmacro %}
+
+{# Skill names as small pills. #}
+{% macro skill_badges(skills) -%}
+{% for skill in skills %}<span class="badge rounded-pill skill-badge me-1">{{ skill }}</span>{% endfor %}
+{%- endmacro %}
+
 {# A POST form whose submit button asks for confirmation first (see static/app.js).
    `cascade` is the text from cascade_message(), e.g. "2 jobs, 1 contact". #}
 {% macro delete_button(action, name, cascade="", size="sm") -%}

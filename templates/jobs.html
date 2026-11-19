@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% from "_macros.html" import delete_button, skill_badges %}
+{% block title %}Jobs{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Jobs</h1>
+    <a class="btn btn-primary" href="{{ url_for('jobs_new', company_id=selected_company_id) }}">+ Add job</a>
+</div>
+
+<form class="row g-2 mb-3 align-items-end" method="get" action="{{ url_for('jobs') }}">
+    <div class="col-sm-5 col-md-4">
+        <label for="filter_company" class="form-label small text-muted mb-1">Company</label>
+        <select class="form-select" id="filter_company" name="company_id">
+            <option value="">All companies</option>
+            {% for c in companies %}
+            <option value="{{ c.company_id }}" {% if c.company_id == selected_company_id %}selected{% endif %}>
+                {{ c.company_name }}{% if c.city %} ({{ c.city }}){% endif %}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-sm-4 col-md-3">
+        <label for="filter_type" class="form-label small text-muted mb-1">Job type</label>
+        <select class="form-select" id="filter_type" name="job_type">
+            <option value="">All types</option>
+            {% for t in JOB_TYPES %}
+            <option value="{{ t }}" {% if t == selected_job_type %}selected{% endif %}>{{ t }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-auto">
+        <button type="submit" class="btn btn-outline-primary">Filter</button>
+        {% if selected_company_id or selected_job_type %}
+        <a class="btn btn-link" href="{{ url_for('jobs') }}">Clear</a>
+        {% endif %}
+    </div>
+</form>
+
+<div class="card">
+    {% if jobs %}
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Company</th>
+                    <th>Type</th>
+                    <th>Salary</th>
+                    <th>Skills</th>
+                    <th>Posted</th>
+                    <th class="text-end">Apps</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for job in jobs %}
+                <tr>
+                    <td><a href="{{ url_for('jobs_detail', job_id=job.job_id) }}">{{ job.job_title }}</a></td>
+                    <td><a class="link-secondary" href="{{ url_for('companies_detail', company_id=job.company_id) }}">{{ job.company_name }}</a></td>
+                    <td class="text-nowrap">{{ job.job_type }}</td>
+                    <td class="text-nowrap">{{ job | salary_range }}</td>
+                    <td>{{ skill_badges(job.requirements.get("skills", [])) }}</td>
+                    <td class="text-nowrap">{{ job.date_posted or "—" }}</td>
+                    <td class="text-end">{{ job.application_count }}</td>
+                    <td class="text-end text-nowrap">
+                        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('jobs_edit', job_id=job.job_id) }}">Edit</a>
+                        {{ delete_button(url_for('jobs_delete', job_id=job.job_id),
+                                         job.job_title ~ " at " ~ job.company_name, cascade_message(job)) }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% elif selected_company_id or selected_job_type %}
+    <div class="empty-state">No jobs match these filters.</div>
+    {% else %}
+    <div class="empty-state">No jobs yet. <a href="{{ url_for('jobs_new') }}">Add the first one.</a></div>
+    {% endif %}
+</div>
+{% endblock %}

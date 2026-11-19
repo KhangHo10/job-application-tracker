@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from flask import Flask, abort, flash, redirect, render_template, request, url_for
 
 import database as db
-from validators import validate_company
+from validators import JOB_TYPES, parse_int, validate_company, validate_job
 
 load_dotenv()
 
@@ -60,6 +60,12 @@ def cascade_message(counts):
 
 
 app.jinja_env.globals["cascade_message"] = cascade_message
+app.jinja_env.globals["JOB_TYPES"] = JOB_TYPES
+
+
+def flash_errors(errors):
+    for error in errors:
+        flash(error, "error")
 
 
 # ---------------------------------------------------------------------
@@ -90,8 +96,7 @@ def companies_new():
             company_id = db.create_company(data)
             flash(f"Added {data['company_name']}.", "success")
             return redirect(url_for("companies_detail", company_id=company_id))
-        for error in errors:
-            flash(error, "error")
+        flash_errors(errors)
         return render_template("company_form.html", form=request.form, company=None), 400
     return render_template("company_form.html", form={}, company=None)
 
@@ -102,7 +107,7 @@ def companies_detail(company_id):
     return render_template(
         "company_detail.html",
         company=company,
-        jobs=db.get_company_jobs(company_id),
+        jobs=db.get_jobs(company_id=company_id),
         contacts=db.get_company_contacts(company_id),
         cascade=db.get_company_cascade_counts(company_id),
     )
@@ -117,8 +122,7 @@ def companies_edit(company_id):
             db.update_company(company_id, data)
             flash(f"Updated {data['company_name']}.", "success")
             return redirect(url_for("companies_detail", company_id=company_id))
-        for error in errors:
-            flash(error, "error")
+        flash_errors(errors)
         return render_template("company_form.html", form=request.form, company=company), 400
     return render_template("company_form.html", form=company, company=company)
 
@@ -134,13 +138,101 @@ def companies_delete(company_id):
 
 
 # ---------------------------------------------------------------------
-# Placeholders until each section is built
+# Jobs
 # ---------------------------------------------------------------------
+
+def job_form_values(job):
+    """Flatten a job row into the form's field names (requirements JSON -> 3 fields)."""
+    requirements = job["requirements"]
+    return dict(
+        job,
+        skills=", ".join(requirements.get("skills", [])),
+        experience_years=requirements.get("experience_years"),
+        education=requirements.get("education"),
+    )
+
+
+def validate_job_form(form):
+    """validate_job plus a check that the chosen company still exists."""
+    data, errors = validate_job(form)
+    if data["company_id"] is not None and db.get_company(data["company_id"]) is None:
+        errors.append("The selected company no longer exists.")
+    return data, errors
+
+
+def render_job_form(form, job=None, status=200):
+    return render_template("job_form.html", form=form, job=job,
+                           companies=db.get_company_options()), status
+
 
 @app.route("/jobs")
 def jobs():
-    return render_template("base.html", title="Jobs")
+    # Unknown filter values are ignored rather than treated as errors.
+    company_id = parse_int(request.args.get("company_id") or "")
+    job_type = request.args.get("job_type")
+    if job_type not in JOB_TYPES:
+        job_type = None
+    return render_template(
+        "jobs.html",
+        jobs=db.get_jobs(company_id=company_id, job_type=job_type),
+        companies=db.get_company_options(),
+        selected_company_id=company_id,
+        selected_job_type=job_type,
+    )
 
+
+@app.route("/jobs/new", methods=["GET", "POST"])
+def jobs_new():
+    if request.method == "POST":
+        data, errors = validate_job_form(request.form)
+        if not errors:
+            job_id = db.create_job(data)
+            flash(f"Added {data['job_title']}.", "success")
+            return redirect(url_for("jobs_detail", job_id=job_id))
+        flash_errors(errors)
+        return render_job_form(request.form, status=400)
+    # ?company_id=N pre-selects the company (from the company detail page).
+    return render_job_form({"company_id": parse_int(request.args.get("company_id") or "")})
+
+
+@app.route("/jobs/<int:job_id>")
+def jobs_detail(job_id):
+    job = db.get_job(job_id) or abort(404)
+    return render_template(
+        "job_detail.html",
+        job=job,
+        applications=db.get_job_applications(job_id),
+        cascade=db.get_job_cascade_counts(job_id),
+    )
+
+
+@app.route("/jobs/<int:job_id>/edit", methods=["GET", "POST"])
+def jobs_edit(job_id):
+    job = db.get_job(job_id) or abort(404)
+    if request.method == "POST":
+        data, errors = validate_job_form(request.form)
+        if not errors:
+            db.update_job(job_id, data)
+            flash(f"Updated {data['job_title']}.", "success")
+            return redirect(url_for("jobs_detail", job_id=job_id))
+        flash_errors(errors)
+        return render_job_form(request.form, job=job, status=400)
+    return render_job_form(job_form_values(job), job=job)
+
+
+@app.route("/jobs/<int:job_id>/delete", methods=["POST"])
+def jobs_delete(job_id):
+    job = db.get_job(job_id) or abort(404)
+    also_removed = cascade_message(db.get_job_cascade_counts(job_id))
+    db.delete_job(job_id)
+    message = f"Deleted {job['job_title']} at {job['company_name']}"
+    flash(f"{message} and {also_removed}." if also_removed else f"{message}.", "success")
+    return redirect(url_for("jobs"))
+
+
+# ---------------------------------------------------------------------
+# Placeholders until each section is built
+# ---------------------------------------------------------------------
 
 @app.route("/applications")
 def applications():

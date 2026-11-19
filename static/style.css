@@ -51,6 +51,13 @@ body {
     font-size: 0.9rem;
 }
 
+/* Skill pills on job pages and Job Match. */
+.skill-badge {
+    background-color: #e7f1ff;
+    color: #0a58ca;
+    font-weight: 500;
+}
+
 /* Small helper for empty states ("No companies yet"). */
 .empty-state {
     color: #6c757d;

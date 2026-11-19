@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% set heading = "Edit " ~ job.job_title if job else "Add job" %}
+{% block title %}{{ heading }}{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>{{ heading }}</h1>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <form method="post">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label for="company_id" class="form-label">Company <span class="text-danger">*</span></label>
+                    <select class="form-select" id="company_id" name="company_id" required>
+                        <option value="">Choose a company…</option>
+                        {% for c in companies %}
+                        <option value="{{ c.company_id }}"
+                                {% if form.company_id is not none and form.company_id | string == c.company_id | string %}selected{% endif %}>
+                            {{ c.company_name }}{% if c.city %} ({{ c.city }}){% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    {% if not companies %}
+                    <div class="form-text">No companies yet — <a href="{{ url_for('companies_new') }}">add one first</a>.</div>
+                    {% endif %}
+                </div>
+                <div class="col-md-6">
+                    <label for="job_title" class="form-label">Job title <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="job_title" name="job_title"
+                           value="{{ form.job_title or '' }}" required maxlength="100">
+                </div>
+                <div class="col-md-4">
+                    <label for="job_type" class="form-label">Job type <span class="text-danger">*</span></label>
+                    <select class="form-select" id="job_type" name="job_type" required>
+                        {% for t in JOB_TYPES %}
+                        <option value="{{ t }}" {% if t == (form.job_type or "Full-time") %}selected{% endif %}>{{ t }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="salary_min" class="form-label">Minimum salary ($/year)</label>
+                    <input type="number" class="form-control" id="salary_min" name="salary_min"
+                           value="{{ form.salary_min if form.salary_min is not none else '' }}" min="0" step="1">
+                </div>
+                <div class="col-md-4">
+                    <label for="salary_max" class="form-label">Maximum salary ($/year)</label>
+                    <input type="number" class="form-control" id="salary_max" name="salary_max"
+                           value="{{ form.salary_max if form.salary_max is not none else '' }}" min="0" step="1">
+                </div>
+                <div class="col-md-8">
+                    <label for="job_url" class="form-label">Job posting URL</label>
+                    <input type="text" class="form-control" id="job_url" name="job_url"
+                           value="{{ form.job_url or '' }}" maxlength="300" placeholder="https://example.com/jobs/123">
+                </div>
+                <div class="col-md-4">
+                    <label for="date_posted" class="form-label">Date posted</label>
+                    <input type="date" class="form-control" id="date_posted" name="date_posted"
+                           value="{{ form.date_posted or '' }}">
+                </div>
+            </div>
+
+            <h2 class="h6 mt-4 mb-3 text-muted text-uppercase small">Requirements</h2>
+            <div class="row g-3">
+                <div class="col-12">
+                    <label for="skills" class="form-label">Skills</label>
+                    <input type="text" class="form-control" id="skills" name="skills"
+                           value="{{ form.skills or '' }}" placeholder="Python, SQL, Flask">
+                    <div class="form-text">Separate skills with commas. Job Match compares these to your skills.</div>
+                </div>
+                <div class="col-md-4">
+                    <label for="experience_years" class="form-label">Years of experience</label>
+                    <input type="number" class="form-control" id="experience_years" name="experience_years"
+                           value="{{ form.experience_years if form.experience_years is not none else '' }}"
+                           min="0" max="50" step="1">
+                </div>
+                <div class="col-md-8">
+                    <label for="education" class="form-label">Education</label>
+                    <input type="text" class="form-control" id="education" name="education"
+                           value="{{ form.education or '' }}" maxlength="100" placeholder="e.g. Bachelor's in Computer Science">
+                </div>
+            </div>
+
+            <div class="mt-4 d-flex gap-2">
+                <button type="submit" class="btn btn-primary">{{ "Save changes" if job else "Add job" }}</button>
+                <a class="btn btn-outline-secondary"
+                   href="{{ url_for('jobs_detail', job_id=job.job_id) if job else url_for('jobs') }}">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
